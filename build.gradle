@@ -1,0 +1,37 @@
+plugins {
+    id 'java'
+}
+
+group = 'agent'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.ow2.asm:asm:9.7.1'
+    implementation 'org.ow2.asm:asm-commons:9.7.1'
+}
+
+tasks.jar {
+    manifest {
+        attributes(
+            'Premain-Class': 'agent.logger.MethodCallAgent',
+            'Agent-Class': 'agent.logger.MethodCallAgent',
+            'Can-Retransform-Classes': 'true',
+            'Can-Redefine-Classes': 'true'
+        )
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}

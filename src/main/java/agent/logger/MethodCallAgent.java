@@ -1,12 +1,8 @@
 package agent.logger;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
-import java.util.HashSet;
-import java.util.Properties;
 import java.util.Set;
 
 import org.objectweb.asm.ClassReader;
@@ -17,29 +13,11 @@ import org.objectweb.asm.Opcodes;
 
 
 public class MethodCallAgent {
-    private static Set<String> loadTargetPackages() {
-        Set<String> targetPackages = new HashSet<>();
-
-        try (InputStream input = MethodCallAgent.class.getResourceAsStream("/agent-config.properties")) {
-            Properties props = new Properties();
-            props.load(input);
-            
-            String packages = props.getProperty("target.packages", "");
-
-            for (String pkg : packages.split(",")) {
-                targetPackages.add(pkg.replace(".", "/"));
-            }
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return targetPackages;
-    }
 
     public static void premain(String agentArgs, Instrumentation inst) {
-        Set<String> targetPackages = loadTargetPackages();
-
+        ConfigLoader config = new ConfigLoader();
+        Set<String> targetPackages = config.getTargetPackages();
+        
         inst.addTransformer(new ClassFileTransformer() {
             @Override
             public byte[] transform(ClassLoader loader, String className,

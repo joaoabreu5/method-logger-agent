@@ -10,30 +10,35 @@ import java.util.function.Consumer;
 
 public class ConfigLoader {
     private static final String CONFIG_FILE_FIELD = "config.file";
+
     private static final String TARGET_PACKAGES_FIELD = "target.packages";
+    private static final String OUTPUT_FILE_PATH_FIELD = "output.file.path";
 
     private Set<String> targetPackages = Set.of("org/eclipse/edc");
+    private String outputFilePath = null;
 
     private final Map<String, Consumer<String>> propertyHandlers = Map.ofEntries(
-        Map.entry(TARGET_PACKAGES_FIELD, this::loadTargetPackages)
+        Map.entry(TARGET_PACKAGES_FIELD, this::setTargetPackages),
+        Map.entry(OUTPUT_FILE_PATH_FIELD, this::setOutputFilePath)
     );
-    
+
+
     public ConfigLoader() {
         loadFromFile();
         loadFromSystemProperties();
     }
 
+
     // Load values from a properties file
     private void loadFromFile() {
-        String filePath = System.getProperty(CONFIG_FILE_FIELD);
+        String configFilePath = System.getProperty(CONFIG_FILE_FIELD);
 
-        if (filePath != null && !filePath.isEmpty()) {
-            try (FileInputStream input = new FileInputStream(filePath)) {
+        if (configFilePath != null && !configFilePath.isBlank()) {
+            try (FileInputStream input = new FileInputStream(configFilePath)) {
                 Properties fileProperties = new Properties();
                 fileProperties.load(input);
-
                 loadProperties(fileProperties);
-            } 
+            }
             catch (IOException e) {
                 System.err.println("Error loading properties file: " + e.getMessage());
             }
@@ -55,21 +60,46 @@ public class ConfigLoader {
         }
     }
 
-    private void loadTargetPackages(String packagesProperty) {
+
+    public Set<String> getTargetPackages() {
+        return this.targetPackages;
+    }
+
+    public String getOutputFilePath() {
+        return this.outputFilePath;
+    }
+
+    private void setTargetPackages(String property) {
         Set<String> packages = new HashSet<>();
 
-        for (String pkg : packagesProperty.split(",")) {
+        for (String pkg : property.split(",")) {
             packages.add(pkg.replace(".", "/"));
         }
 
         this.targetPackages = Set.copyOf(packages);
     }
 
-    public Set<String> getTargetPackages() {
-        return this.targetPackages;
+    private void setOutputFilePath(String property) {
+        this.outputFilePath = property;
     }
 
+    public Boolean hasOutputFile() {
+        return this.outputFilePath != null && !this.outputFilePath.isBlank();
+    }
+
+    private String formatProperty(String property, Object value) {
+        return String.format("%s = %s", property, value);
+    }
+    
+    @Override
+    public String toString() {
+        return String.join("\n",
+            formatProperty(TARGET_PACKAGES_FIELD, targetPackages),
+            formatProperty(OUTPUT_FILE_PATH_FIELD, outputFilePath)
+        );
+    }
+    
     public void printConfig() {
-        System.out.println(TARGET_PACKAGES_FIELD + " = " + targetPackages);
+        System.out.println(this);
     }
 }

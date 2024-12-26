@@ -1,5 +1,8 @@
 package agent.logger;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
@@ -13,10 +16,25 @@ import org.objectweb.asm.Opcodes;
 
 
 public class MethodCallAgent {
+    private static BufferedWriter writer = null;
 
     public static void premain(String agentArgs, Instrumentation inst) {
         ConfigLoader config = new ConfigLoader();
+
         Set<String> targetPackages = config.getTargetPackages();
+        Boolean hasOutputFile = config.hasOutputFile();
+
+        if (hasOutputFile) {
+            String outputFilePath = config.getOutputFilePath();
+
+            try {
+                writer = new BufferedWriter(new FileWriter(outputFilePath, false));
+            } 
+            catch (IOException e) {
+                System.err.println("Error initializing BufferedWriter for file: " + outputFilePath);
+            }
+        }
+
         
         inst.addTransformer(new ClassFileTransformer() {
             @Override
@@ -36,12 +54,48 @@ public class MethodCallAgent {
                     return classWriter.toByteArray();
                 } 
                 catch (Exception e) {
-                    e.printStackTrace();
+                    System.err.println("Error while transforming class: " + className);
                     return classfileBuffer; // Return unmodified bytecode on failure
                 }
             }
         });
+
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } 
+                catch (IOException e) {
+                    System.err.println("Error while closing the BufferedWriter.");
+                }
+            }
+        }));
     }
+
+    
+    // Method to log app method called
+    public static void logMethodCalled(String className, String methodName) {
+        String message = "METHOD CALLED --> Class: \"" + className.replace('/', '.') + "\", Method: \"" + methodName + "\"";
+        String timestamp = java.time.LocalDateTime.now().toString();
+
+        String formattedMessage = String.format("%s %s", timestamp, message);
+
+        if (writer == null) {
+            System.out.println(formattedMessage);
+        }
+        else {
+            try {
+                writer.write(formattedMessage);
+                writer.newLine();
+                writer.flush();
+            } 
+            catch (IOException e) {
+                System.err.println("Error writing to file: " + e.getMessage());
+            }
+        }
+    }
+
 
     // Custom ClassVisitor to add method logging
     private static class MethodLoggingClassVisitor extends ClassVisitor {
@@ -62,14 +116,6 @@ public class MethodCallAgent {
             
             return mv;
         }
-    }
-
-    // Method to log app method called
-    public static void logMethodCalled(String className, String methodName) {
-        String message = "METHOD CALLED --> Class: \"" + className.replace('/', '.') + "\", Method: \"" + methodName + "\"";
-        String timestamp = java.time.LocalDateTime.now().toString();
-
-        System.out.println(String.format("%s  %s", timestamp, message));
     }
 
     // Custom MethodVisitor to insert logging at the start of each method

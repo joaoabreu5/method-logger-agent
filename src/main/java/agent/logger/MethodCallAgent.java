@@ -18,9 +18,9 @@ import org.objectweb.asm.Opcodes;
 public class MethodCallAgent {
     private static BufferedWriter writer = null;
 
+    private static final ConfigLoader config = new ConfigLoader();
+    
     public static void premain(String agentArgs, Instrumentation inst) {
-        ConfigLoader config = new ConfigLoader();
-
         Set<String> targetPackages = config.getTargetPackages();
         Boolean hasOutputFile = config.hasOutputFile();
 
@@ -35,7 +35,6 @@ public class MethodCallAgent {
             }
         }
 
-        
         inst.addTransformer(new ClassFileTransformer() {
             @Override
             public byte[] transform(ClassLoader loader, String className,
@@ -59,26 +58,37 @@ public class MethodCallAgent {
                 }
             }
         });
+    }
+    
+    public static void logMethodCalled(String className, String methodName) {
+        Set<String> targetPackages = config.getTargetPackages();
+        String message = "METHOD CALLED --> Class: \"" + className.replace('/', '.') + "\", Method: \"" + methodName + "\"";
+        
+        boolean foundCalled = false;
+        boolean foundCaller = false;
 
+        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (writer != null) {
-                try {
-                    writer.close();
-                } 
-                catch (IOException e) {
-                    System.err.println("Error while closing the BufferedWriter.");
+        for (int i = 0; i < stackTraceElements.length && !foundCaller; i++) {
+            String elementClassName = stackTraceElements[i].getClassName();
+            String elementMethodName = stackTraceElements[i].getMethodName();
+
+            String elementInternalClassName = elementClassName.replace(".", "/");
+
+            if (foundCalled) {
+                if (targetPackages.stream().anyMatch(elementInternalClassName::startsWith)) {
+                    message += " --> Caller Class: \"" + elementClassName + "\", Caller Method \"" + elementMethodName + "\"";
+                    foundCaller = true;
                 }
             }
-        }));
-    }
+            else {
+                if (elementInternalClassName.equals(className) && elementMethodName.equals(methodName)) {
+                    foundCalled = true;
+                }
+            }
+        }
 
-    
-    // Method to log app method called
-    public static void logMethodCalled(String className, String methodName) {
-        String message = "METHOD CALLED --> Class: \"" + className.replace('/', '.') + "\", Method: \"" + methodName + "\"";
         String timestamp = java.time.LocalDateTime.now().toString();
-
         String formattedMessage = String.format("%s %s", timestamp, message);
 
         if (writer == null) {
@@ -110,7 +120,7 @@ public class MethodCallAgent {
         public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
             MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
             
-            if (mv != null && !name.equals("<init>") && !name.equals("<clinit>")) {
+            if (mv != null) {
                 mv = new MethodLoggingMethodVisitor(mv, className, name);
             }
             
